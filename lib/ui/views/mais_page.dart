@@ -174,6 +174,118 @@ class _MaisPageState extends State<MaisPage> with WidgetsBindingObserver {
     if (!ok) _mensagem('Não foi possível gerar o relatório. Tente novamente.');
   }
 
+  Future<void> _exportar() async {
+    final formato = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text('Como deseja exportar?'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.picture_as_pdf_outlined),
+              title: const Text('PDF para o médico'),
+              subtitle: const Text('Escolher período, respostas e fotos'),
+              onTap: () => Navigator.pop(sheetContext, 'pdf'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.file_upload_outlined),
+              title: const Text('Arquivo para outro celular'),
+              subtitle: const Text('Todos os registros e fotos originais'),
+              onTap: () => Navigator.pop(sheetContext, 'arquivo'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || formato == null) return;
+    if (formato == 'pdf') {
+      await _relatorio();
+    } else {
+      await _exportarRegistros();
+    }
+  }
+
+  Future<void> _exportarRegistros() async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Exportar registros?'),
+        content: const Text(
+          'O arquivo inclui todas as refeições, fotos originais e respostas '
+          'de como se sentiu, sem os filtros do PDF. '
+          'Compartilhe apenas com pessoas de confiança: contém dados de saúde '
+          'e não é protegido por senha.\n\n'
+          'No outro celular, use Configurações → Importar registros. '
+          'Limite do arquivo: 100 MB.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Exportar'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || confirmar != true) return;
+    if (!await viewModel.exportarRegistros()) {
+      _mensagem(
+        viewModel.erroTransferencia ?? 'Aguarde a operação em andamento.',
+      );
+    }
+  }
+
+  Future<void> _importarRegistros() async {
+    final arquivo = await viewModel.selecionarRegistros();
+    if (!mounted) return;
+    if (arquivo == null) {
+      if (viewModel.erroTransferencia case final erro?) _mensagem(erro);
+      return;
+    }
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Importar registros?'),
+        content: Text(
+          'O arquivo contém ${arquivo.registros.length} registro(s). '
+          'As refeições atuais serão mantidas e cópias idênticas serão ignoradas. '
+          'Registros com informações diferentes serão adicionados separadamente. '
+          'Seus lembretes não serão alterados.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Importar'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || confirmar != true) return;
+    final resultado = await viewModel.importarRegistros(arquivo);
+    if (resultado == null) {
+      _mensagem(
+        viewModel.erroTransferencia ?? 'Aguarde a operação em andamento.',
+      );
+      return;
+    }
+    _mensagem(
+      '${resultado.importados} registro(s) importado(s). '
+      '${resultado.duplicados} cópia(s) idêntica(s) ignorada(s).',
+    );
+  }
+
   void _sobre(BuildContext context) {
     showAboutDialog(
       context: context,
@@ -236,10 +348,7 @@ class _MaisPageState extends State<MaisPage> with WidgetsBindingObserver {
     return ListenableBuilder(
       listenable: viewModel,
       builder: (context, _) {
-        final ocupado =
-            viewModel.atualizando ||
-            viewModel.salvando ||
-            viewModel.gerandoRelatorio;
+        final ocupado = viewModel.ocupadoComRegistros;
         return Scaffold(
           backgroundColor: _fundo,
           appBar: AppBar(
@@ -302,8 +411,25 @@ class _MaisPageState extends State<MaisPage> with WidgetsBindingObserver {
                   titulo: 'Relatório para o médico',
                   subtitulo: viewModel.gerandoRelatorio
                       ? 'Gerando relatório...'
-                      : 'Gerar PDF e enviar por WhatsApp ou e-mail',
-                  onTap: viewModel.gerandoRelatorio ? null : _relatorio,
+                      : 'Exportar como PDF ou arquivo de registros',
+                  onTap: ocupado ? null : _exportar,
+                ),
+                const SizedBox(height: 8),
+                const _Secao('Transferência de registros'),
+                _Opcao(
+                  icone: Icons.file_upload_outlined,
+                  titulo: 'Exportar registros',
+                  subtitulo: 'Todos os registros e fotos para outro celular',
+                  onTap: ocupado ? null : _exportarRegistros,
+                ),
+                const SizedBox(height: 12),
+                _Opcao(
+                  icone: Icons.file_download_outlined,
+                  titulo: 'Importar registros',
+                  subtitulo: viewModel.transferindo
+                      ? 'Transferindo registros...'
+                      : 'Abrir um arquivo exportado pelo Meu Almoço',
+                  onTap: ocupado ? null : _importarRegistros,
                 ),
                 const SizedBox(height: 8),
                 const _Secao('Aplicativo'),

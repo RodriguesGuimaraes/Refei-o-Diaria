@@ -9,6 +9,7 @@ import 'data/repositories/refeicao_repository.dart';
 import 'data/services/hive_service.dart';
 import 'data/services/notification_service.dart';
 import 'data/services/relatorio_service.dart';
+import 'data/services/transferencia_service.dart';
 import 'ui/viewmodels/home_viewmodel.dart';
 import 'ui/views/home_page.dart';
 
@@ -62,6 +63,7 @@ class _MyAppState extends State<MyApp> {
         configuracoesRepository: ConfiguracoesRepository(hiveService: hive),
         notificacoes: notificacoes,
         relatorios: PdfRelatorioService(),
+        transferencia: ArquivoTransferenciaService(),
       );
       _model = model;
       await model.inicializar();

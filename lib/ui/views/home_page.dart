@@ -7,6 +7,7 @@ import '../viewmodels/home_viewmodel.dart';
 import 'detalhes_refeicao_page.dart';
 import 'feedback_page.dart';
 import 'historico_page.dart';
+import 'mais_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key, required this.viewModel, this.cameraBuilder});
@@ -166,6 +167,18 @@ class _HomePageState extends State<HomePage> {
                                     viewModel: viewModel,
                                     cameraBuilder: cameraBuilder,
                                   ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 18),
+                            _AcaoInicial(
+                              titulo: 'Configurações',
+                              descricao: 'Lembretes, relatórios e registros',
+                              icone: Icons.settings_outlined,
+                              onPressed: () => Navigator.of(context).push<void>(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      MaisPage(viewModel: viewModel),
                                 ),
                               ),
                             ),

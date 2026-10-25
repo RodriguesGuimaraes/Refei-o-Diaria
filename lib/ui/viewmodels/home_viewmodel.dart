@@ -5,6 +5,8 @@ import '../../data/repositories/configuracoes_repository.dart';
 import '../../data/repositories/refeicao_repository.dart';
 import '../../data/services/notification_service.dart';
 import '../../data/services/relatorio_service.dart';
+import '../../data/services/transferencia_service.dart';
+import '../../models/arquivo_registros.dart';
 import '../../models/configuracoes_lembretes.dart';
 import '../../models/refeicao.dart';
 
@@ -14,6 +16,7 @@ class HomeViewModel extends ChangeNotifier {
     this.configuracoesRepository,
     NotificationService? notificacoes,
     this.relatorios,
+    this.transferencia,
     Future<XFile?> Function()? selecionarFoto,
     Future<LostDataResponse> Function()? recuperarFotos,
   }) : notificacoes = notificacoes ?? const NotificacoesDesativadas(),
@@ -26,6 +29,7 @@ class HomeViewModel extends ChangeNotifier {
   final ConfiguracoesRepository? configuracoesRepository;
   final NotificationService notificacoes;
   final RelatorioService? relatorios;
+  final TransferenciaService? transferencia;
   final Future<XFile?> Function() _selecionarFoto;
   final Future<LostDataResponse> Function() _recuperarFotos;
   List<Refeicao> _refeicoes = [];
@@ -43,6 +47,63 @@ class HomeViewModel extends ChangeNotifier {
   String? caminhoImagem;
   bool respondendo = false;
   bool gerandoRelatorio = false;
+  bool transferindo = false;
+  String? erroTransferencia;
+
+  bool get ocupadoComRegistros =>
+      carregando ||
+      salvando ||
+      atualizando ||
+      respondendo ||
+      gerandoRelatorio ||
+      transferindo;
+
+  Future<T?> _transferir<T>(Future<T> Function() operacao) async {
+    if (_descartado || ocupadoComRegistros) return null;
+    transferindo = true;
+    erroTransferencia = null;
+    _notificar();
+    try {
+      return await operacao();
+    } on FormatException catch (erro) {
+      erroTransferencia = erro.message;
+      return null;
+    } catch (erro, stack) {
+      debugPrint('Falha na transferência de registros: $erro\n$stack');
+      erroTransferencia =
+          'Não foi possível transferir os registros. '
+          'Verifique o arquivo, as fotos e o espaço disponível.';
+      return null;
+    } finally {
+      transferindo = false;
+      _notificar();
+    }
+  }
+
+  TransferenciaService get _transferencia {
+    final servico = transferencia;
+    if (servico == null) {
+      throw StateError('Transferência de registros indisponível.');
+    }
+    return servico;
+  }
+
+  Future<bool> exportarRegistros() async =>
+      await _transferir(() async {
+        await _transferencia.exportar(await repository.listar());
+        return true;
+      }) ??
+      false;
+
+  Future<ArquivoRegistros?> selecionarRegistros() =>
+      _transferir<ArquivoRegistros?>(() => _transferencia.selecionar());
+
+  Future<ResultadoImportacao?> importarRegistros(ArquivoRegistros arquivo) =>
+      _transferir(() async {
+        final resultado = await repository.importar(arquivo);
+        await carregar();
+        return resultado;
+      });
   ConfiguracoesLembretes lembretes = const ConfiguracoesLembretes();
 
   /// `null` enquanto a permissão de notificação ainda não foi verificada.
@@ -156,7 +217,9 @@ class HomeViewModel extends ChangeNotifier {
   }
 
   Future<bool> salvar() async {
-    if (salvando || selecionandoFoto || _descartado) return false;
+    if (salvando || selecionandoFoto || transferindo || _descartado) {
+      return false;
+    }
     if (descricao.trim().isEmpty) {
       erroFormulario = 'Informe a descricao da refeicao.';
       _notificar();
@@ -191,7 +254,7 @@ class HomeViewModel extends ChangeNotifier {
   }
 
   Future<bool> atualizar(Refeicao refeicao) async {
-    if (atualizando || _descartado) return false;
+    if (atualizando || transferindo || _descartado) return false;
     atualizando = true;
     _notificar();
     try {
@@ -208,7 +271,7 @@ class HomeViewModel extends ChangeNotifier {
   }
 
   Future<bool> excluir(int id) async {
-    if (atualizando || _descartado) return false;
+    if (atualizando || transferindo || _descartado) return false;
     atualizando = true;
     _notificar();
     try {
@@ -225,7 +288,7 @@ class HomeViewModel extends ChangeNotifier {
   }
 
   Future<bool> limparTudo() async {
-    if (atualizando || salvando || _descartado) return false;
+    if (atualizando || salvando || transferindo || _descartado) return false;
     atualizando = true;
     _notificar();
     try {
@@ -256,7 +319,7 @@ class HomeViewModel extends ChangeNotifier {
   ]);
 
   Future<bool> _gravarRespostas(List<Refeicao> respostas) async {
-    if (respondendo || _descartado) return false;
+    if (respondendo || transferindo || _descartado) return false;
     if (respostas.isEmpty) return true;
     respondendo = true;
     _notificar();

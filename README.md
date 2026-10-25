@@ -55,10 +55,28 @@ selecionar fotos sem chamar plugins nativos nos testes de widget.
 No aparelho, confira o cadastro com e sem foto, cancelamento da galeria,
 reabertura do aplicativo, teclado e selecao de data.
 
-## Limites desta etapa
+## Transferir registros entre celulares
 
-NotificationService e apenas uma classe-base; notificacoes nao sao agendadas.
-Camera, edicao, exclusao, sincronizacao e outras plataformas nao fazem parte
-desta entrega. Os dados sobrevivem ao fechamento do app, mas limpar os dados
-ou desinstalar pode remove-los. Nao ha criptografia adicional nem garantia de
-transacao atomica entre o banco e os arquivos em caso de encerramento abrupto.
+Na tela inicial, **Configuracoes** abre a tela **Mais**. Em **Relatorio para
+o medico**, escolha PDF (com os filtros existentes) ou arquivo de registros.
+Tambem existem atalhos **Exportar registros** e **Importar registros**.
+
+A exportacao cria um arquivo `registros.meualmoco.json` (formato versionado 1)
+com todas as refeicoes, datas, porcoes, respostas, observacoes e fotos originais
+em base64, sem caminhos privados do celular e sem os filtros do PDF.
+O limite de arquivo e 100 MB. Fotos ausentes ou ilegíveis interrompem a
+exportacao em vez de gerar uma copia incompleta.
+
+Envie/salve o arquivo e, no outro celular, use **Importar registros**.
+Apos validar o arquivo, o app pede confirmacao e mescla os registros sem
+apagar os atuais. Copias identicas (incluindo conteudo da foto) sao ignoradas,
+mesmo ao importar o mesmo arquivo novamente. Registros alterados sao mantidos
+separadamente, sem sobrescrever respostas existentes. Configuracoes de
+lembretes nao sao transferidas. PDF nao pode ser importado.
+
+O arquivo contem dados de saude e fotos, **sem criptografia ou senha**.
+Compartilhe apenas com pessoas de confianca. O arquivo compartilhado fica no
+cache temporario do Android; salve uma copia fora do app para guarda-lo.
+Os dados locais sobrevivem ao fechamento do app, mas limpar os dados ou
+desinstalar pode remove-los. Uma interrupcao abrupta durante a importacao
+nao tem garantia de transacao atomica entre Hive e arquivos.

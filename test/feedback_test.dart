@@ -641,6 +641,8 @@ void main() {
       );
       await tester.tap(find.text('Relatório para o médico'));
       await tester.pumpAndSettle();
+      await tester.tap(find.text('PDF para o médico'));
+      await tester.pumpAndSettle();
       expect(find.text('Incluir fotos'), findsOneWidget);
       expect(find.text('Sempre incluídas'), findsOneWidget);
       await tester.tap(find.text('Incluir refeições sem mal-estar'));

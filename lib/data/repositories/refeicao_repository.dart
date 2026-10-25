@@ -1,7 +1,10 @@
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as path;
 
+import '../../models/arquivo_registros.dart';
 import '../../models/refeicao.dart';
 import '../services/hive_service.dart';
 
@@ -9,6 +12,86 @@ class RefeicaoRepository {
   RefeicaoRepository({required this.hiveService});
 
   final HiveService hiveService;
+
+  String _assinatura(RegistroArquivo registro) => sha256
+      .convert(
+        utf8.encode(
+          jsonEncode([
+            registro.refeicao.data.toIso8601String(),
+            registro.refeicao.descricao,
+            registro.refeicao.porcao,
+            registro.refeicao.passouMal,
+            registro.refeicao.observacao,
+            registro.foto == null
+                ? null
+                : sha256.convert(registro.foto!).toString(),
+          ]),
+        ),
+      )
+      .toString();
+
+  Future<ResultadoImportacao> importar(ArquivoRegistros arquivo) async {
+    final existentes = await listar();
+    final assinaturas = <String>{};
+    for (final refeicao in existentes) {
+      assinaturas.add(
+        _assinatura(
+          RegistroArquivo(
+            refeicao: refeicao,
+            foto: refeicao.caminhoImagem == null
+                ? null
+                : await File(refeicao.caminhoImagem!).readAsBytes(),
+          ),
+        ),
+      );
+    }
+    final novos = <RegistroArquivo>[];
+    var duplicados = 0;
+    for (final registro in arquivo.registros) {
+      _validarDescricao(registro.refeicao);
+      if (assinaturas.add(_assinatura(registro))) {
+        novos.add(registro);
+      } else {
+        duplicados++;
+      }
+    }
+    if (novos.isEmpty) {
+      return ResultadoImportacao(importados: 0, duplicados: duplicados);
+    }
+    final pastas = <Directory>[];
+    final registros = <int, Map>{};
+    var proximoId = hiveService.box.keys.fold<int>(
+      0,
+      (maior, chave) => chave is int && chave >= maior ? chave + 1 : maior,
+    );
+    try {
+      for (final registro in novos) {
+        String? relativo;
+        if (registro.foto case final foto?) {
+          await _imagens.create(recursive: true);
+          final pasta = await _imagens.createTemp('refeicao_');
+          pastas.add(pasta);
+          await File(path.join(pasta.path, 'foto'))
+              .writeAsBytes(foto, flush: true);
+          relativo = _relativo(pasta);
+        }
+        registros[proximoId++] = registro.refeicao.toMap()
+          ..['caminhoImagem'] = relativo;
+      }
+      await hiveService.box.putAll(registros);
+      await hiveService.box.flush();
+    } catch (erro, stack) {
+      await hiveService.box.deleteAll(registros.keys);
+      for (final pasta in pastas) {
+        await pasta.delete(recursive: true);
+      }
+      Error.throwWithStackTrace(erro, stack);
+    }
+    return ResultadoImportacao(
+      importados: novos.length,
+      duplicados: duplicados,
+    );
+  }
 
   Future<List<Refeicao>> listar() async {
     final registros = hiveService.box.toMap().entries.toList();
